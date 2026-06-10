@@ -4,9 +4,10 @@ services:
       context: .
       dockerfile: Dockerfile
     image: chatgpt2api:local
-    container_name: chatgpt2api-local
+    container_name: ${APP_CONTAINER_NAME:-chatgpt2api-local}
+    restart: unless-stopped
     ports:
-      - "8000:80"
+      - "${WEB_PORT:-8000}:80"
     volumes:
       - ./data:/app/data
       - ./config.json:/app/config.json
@@ -32,3 +33,13 @@ services:
 
     # 基础 URL (可选)
     #   CHATGPT2API_BASE_URL: https://your-domain.com
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+      - "piachi-tools.test.com:host-gateway"
+    networks:
+      - infra
+
+networks:
+  infra:
+    external: true
+    name: ${APP_DOCKER_NETWORK:-dnmp-infra}
