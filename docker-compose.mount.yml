@@ -18,8 +18,8 @@ services:
         DEBIAN_MIRROR: ${DEBIAN_MIRROR:-http://mirrors.tuna.tsinghua.edu.cn/debian}
         DEBIAN_SECURITY_MIRROR: ${DEBIAN_SECURITY_MIRROR:-http://mirrors.tuna.tsinghua.edu.cn/debian-security}
         PIP_INDEX_URL: ${PIP_INDEX_URL:-https://mirrors.aliyun.com/pypi/simple}
-    image: chatgpt2api:local
-    container_name: ${APP_CONTAINER_NAME:-chatgpt2api-local}
+    image: ai2api:local
+    container_name: ${APP_CONTAINER_NAME:-ai2api-local}
     restart: unless-stopped
     ports:
       - "${WEB_PORT:-18000}:80"

@@ -1,186 +1,201 @@
-<h1 align="center">ChatGPT2API</h1>
+# ai2api
 
+`ai2api` 是一个本地自托管的 AI API 服务，提供 OpenAI 兼容接口、图片生成/编辑能力、账号池管理、在线画图页面和基础运维配置。
 
-<p align="center">ChatGPT2API 主要是对 ChatGPT 官网相关能力进行逆向整理与封装，提供面向 ChatGPT 图片生成、图片编辑、多图组图编辑场景的 OpenAI 兼容图片 API / 代理，并集成在线画图、号池管理、多种账号导入方式与 Docker 自托管部署能力。</p>
+当前推荐部署方式是：**Docker 镜像负责运行环境和依赖，宿主机代码通过 volume 挂载进容器**。
 
-> [!WARNING]
-> 免责声明：
->
-> 本项目涉及对 ChatGPT 官网文本生成、图片生成与图片编辑等相关接口的逆向研究，仅供个人学习、技术研究与非商业性技术交流使用。
->
-> - 严禁将本项目用于任何商业用途、盈利性使用、批量操作、自动化滥用或规模化调用。
-> - 严禁将本项目用于破坏市场秩序、恶意竞争、套利倒卖、二次售卖相关服务，以及任何违反 OpenAI 服务条款或当地法律法规的行为。
-> - 严禁将本项目用于生成、传播或协助生成违法、暴力、色情、未成年人相关内容，或用于诈骗、欺诈、骚扰等非法或不当用途。
-> - 使用者应自行承担全部风险，包括但不限于账号被限制、临时封禁或永久封禁以及因违规使用等所导致的法律责任。
-> - 使用本项目即视为你已充分理解并同意本免责声明全部内容；如因滥用、违规或违法使用造成任何后果，均由使用者自行承担。
-> - 本项目基于对 ChatGPT 官网相关能力的逆向研究实现，存在账号受限、临时封禁或永久封禁的风险。请勿使用你自己的重要账号、常用账号或高价值账号进行测试。
+## 当前本地访问
 
-## 快速开始
+- Web / API：`${AI2API_BASE_URL}`
+- 本地直连示例：`http://127.0.0.1:18000`
+- dnmp nginx 示例：`http://ai2api.test.com`
+- API 前缀：`/v1`
+- 默认容器名：`ai2api-local`
+- 默认镜像名：`ai2api:local`
 
-已发布镜像支持 `linux/amd64` 与 `linux/arm64`，在 x86 服务器和 Apple Silicon / ARM Linux 设备上都会自动拉取匹配架构的版本。
-
-### Docker 运行
+先设置访问地址变量：
 
 ```bash
-git clone git@github.com:basketikun/chatgpt2api.git
-cd chatgpt2api
-docker compose up -d
+export AI2API_BASE_URL=${AI2API_BASE_URL:-http://127.0.0.1:18000}
 ```
 
-启动前请先在 `config.json` 中设置 `auth-key`，也可以在 `docker-compose.yml` 中通过 `CHATGPT2API_AUTH_KEY` 覆盖。
-
-- Web 面板：`http://localhost:3000`
-- API 地址：`http://localhost:3000/v1`
-- 数据目录：`./data`
-
-### 本地开发
-
-启动后端：
+验证服务：
 
 ```bash
-git clone git@github.com:basketikun/chatgpt2api.git
-cd chatgpt2api
-uv sync
-uv run main.py
+curl "$AI2API_BASE_URL/version"
 ```
 
-启动前端：
+通过 nginx 验证：
 
 ```bash
-cd chatgpt2api/web
-bun install
-bun run dev
+curl --noproxy '*' -H 'Host: ai2api.test.com' "${AI2API_NGINX_URL:-http://127.0.0.1}/version"
 ```
 
-后续更新新版本：
+## 目录结构
+
+```text
+.
+├── main.py                  # FastAPI 入口
+├── api/                     # API 路由
+├── services/                # 业务服务
+├── utils/                   # 工具代码
+├── web/                     # 前端 Next.js 静态导出项目
+├── data/                    # 运行数据
+├── docker-compose.mount.yml # 推荐：volume 挂载部署
+├── docker-compose.local.yml # 完整镜像打包部署
+└── Dockerfile
+```
+
+## 环境变量
+
+复制示例配置：
 
 ```bash
-docker pull ghcr.io/basketikun/chatgpt2api:latest
-docker-compose down
-docker-compose up -d
-
+cp .env.example .env
 ```
 
-### 存储后端配置
+常用配置：
 
-支持通过环境变量 `STORAGE_BACKEND` 切换存储方式：
+| 变量 | 默认值 | 说明 |
+| --- | --- | --- |
+| `CHATGPT2API_AUTH_KEY` | `chatgpt2api` | API / Web 登录认证密钥 |
+| `CHATGPT2API_BASE_URL` | 空 | 生成外部可访问图片 URL 时使用 |
+| `APP_CONTAINER_NAME` | `ai2api-local` | Docker 容器名 |
+| `WEB_PORT` | `18000` | 宿主机访问端口 |
+| `APP_DOCKER_NETWORK` | `dnmp-infra` | Docker 外部网络 |
+| `STORAGE_BACKEND` | `sqlite` | 存储后端：`json` / `sqlite` / `postgres` / `git` |
+| `DATABASE_URL` | `sqlite:////app/data/accounts.db` | SQLite / PostgreSQL 连接地址 |
 
-- `json` - 本地 JSON 文件（默认）
-- `sqlite` - 本地 SQLite 数据库
-- `postgres` - 外部 PostgreSQL（需配置 `DATABASE_URL`）
-- `git` - Git 私有仓库（需配置 `GIT_REPO_URL` 和 `GIT_TOKEN`）
+> 说明：环境变量名暂时保留 `CHATGPT2API_*`，这是为了兼容当前代码和已有配置。
 
-示例：使用 PostgreSQL
+## 首次启动
 
-```yaml
-environment:
-  - STORAGE_BACKEND=postgres
-  - DATABASE_URL=postgresql://user:password@host:5432/dbname
+在项目根目录执行：
+
+```bash
+docker network create dnmp-infra || true
+
+docker compose -f docker-compose.mount.yml build app
+
+docker compose -f docker-compose.mount.yml run --rm web-build
+
+docker compose -f docker-compose.mount.yml up -d app
 ```
 
-## 功能
+检查状态：
 
-### API 兼容能力
+```bash
+docker compose -f docker-compose.mount.yml ps
+curl "$AI2API_BASE_URL/version"
+```
 
-- 兼容 `POST /v1/images/generations` 图片生成接口
-- 兼容 `POST /v1/images/edits` 图片编辑接口
-- 兼容面向图片场景的 `POST /v1/chat/completions`
-- 兼容面向图片场景的 `POST /v1/responses`
-- `GET /v1/models` 返回 `gpt-image-2`、`codex-gpt-image-2`、`auto`、`gpt-5`、`gpt-5-1`、`gpt-5-2`、`gpt-5-3`、`gpt-5-3-mini`、
-  `gpt-5-mini`
-- 支持通过 `n` 返回多张生成结果
-- 支持生成可编辑 PPT 文件
-- 支持生成可编辑 PSD 文件
-- 支持 Codex 中的画图接口逆向，仅 `Plus` / `Team` / `Pro` 订阅可用，模型别名为 `codex-gpt-image-2`，如有需要可自行在其他场景映射回
-  `gpt-image-2`，用于和官网画图区分；也就意味着同一账号会同时有官网和 Codex 两份生图额度
+登录验证：
 
-### 在线画图功能
+```bash
+curl -X POST "$AI2API_BASE_URL/auth/login" \
+  -H 'Authorization: Bearer chatgpt2api'
+```
 
-- 内置在线画图工作台，支持生成、图片编辑与多图组图编辑
-- 支持 `gpt-image-2`、`codex-gpt-image-2`、`auto`、`gpt-5`、`gpt-5-1`、`gpt-5-2`、`gpt-5-3`、`gpt-5-3-mini`、`gpt-5-mini` 模型选择
-- 编辑模式支持参考图上传
-- 前端支持多图生成交互
-- 本地保存图片会话历史，支持回看、删除和清空
-- 支持服务端缓存图片URL
-- 图片生成进度追踪，超时后可继续等待
-- 图片懒加载与滚动位置记忆，优化大量图片场景性能
+## 日常更新
 
-### 号池管理功能
+只改 Python 后端代码：
 
-- 自动刷新账号邮箱、类型、额度和恢复时间（异步进度追踪）
-- 轮询可用账号执行图片生成与图片编辑
-- 遇到 Token 失效类错误时自动剔除无效 Token
-- 定时检查限流账号并自动刷新
-- 支持密码重新登录恢复异常账号，刷新后可自动重登
-- 支持网页端配置全局 HTTP / HTTPS / SOCKS5 / SOCKS5H 代理
-- 支持搜索、筛选、批量刷新、导出、手动编辑和清理账号
-- 支持四种导入方式：本地 CPA JSON 文件导入、远程 CPA 服务器导入、`sub2api` 服务器导入、`access_token` 导入
-- 支持在设置页配置 `sub2api` 服务器，筛选并批量导入其中的 OpenAI OAuth 账号
+```bash
+docker compose -f docker-compose.mount.yml restart app
+```
 
-### 实验性 / 规划中
+改了前端代码：
 
-- `/v1/complete` 文本补全与流式输出已实现，但仍在测试，目前会出现对话重复的问题，请谨慎测试使用
-- `/v1/chat/completions` 文本链路支持短 TTL 缓存、重复请求合并与相邻重复消息清理，可通过 `chat_completion_cache` 配置调整
-- 详细状态说明见：[功能清单](./docs/feature-status.en.md)
+```bash
+docker compose -f docker-compose.mount.yml run --rm web-build
+docker compose -f docker-compose.mount.yml restart app
+```
 
-## 效果展示
+改了 Python 依赖文件 `pyproject.toml` / `uv.lock`：
 
-<table width="100%">
-  <tr>
-    <td width="50%"><img src="https://i.ibb.co/Jj8nfwwP/image.png" alt="image" border="0"></td>
-    <td width="50%"><img src="https://i.ibb.co/pqf235v/image-edit.png" alt="image edit" border="0"></td>
-  </tr>
-  <tr>
-    <td width="50%"><img src="https://i.ibb.co/tPcqtVfd/chery-studio.png" alt="chery studio" border="0"></td>
-    <td width="50%"><img src="https://i.ibb.co/PsT9YHBV/account-pool.png" alt="account pool" border="0"></td>
-  </tr>
-  <tr>
-    <td width="50%"><img src="https://i.ibb.co/rRWLG08q/new-api.png" alt="new api" border="0"></td>
-  </tr>
-</table>
+```bash
+docker compose -f docker-compose.mount.yml build app
+docker compose -f docker-compose.mount.yml up -d app
+```
 
-## API
+改了前端依赖文件 `web/package.json` / `web/bun.lock`：
 
-所有 AI 接口都需要请求头：
+```bash
+docker compose -f docker-compose.mount.yml run --rm web-build
+docker compose -f docker-compose.mount.yml restart app
+```
+
+## 前端构建
+
+推荐使用 compose 内置的 Bun 工具容器：
+
+```bash
+docker compose -f docker-compose.mount.yml run --rm web-build
+```
+
+该命令会在 `web/` 下执行：
+
+```bash
+bun install --frozen-lockfile
+bun run build
+```
+
+构建产物输出到：
+
+```text
+web/out
+```
+
+后端容器会把它挂载到：
+
+```text
+/app/web_dist
+```
+
+如果没有 `web/out`，API 可以启动，但 Web 页面可能返回 404。
+
+## dnmp nginx
+
+当前 dnmp nginx 配置文件：
+
+```text
+/opt/dnmp_other/services/nginx/conf.d/ai2api.conf
+```
+
+当前反代目标：
+
+```text
+ai2api-local:80
+```
+
+修改 nginx 配置后验证并重载：
+
+```bash
+docker exec nginx nginx -t
+docker exec nginx nginx -s reload
+```
+
+## API 使用
+
+所有受保护接口都需要：
 
 ```http
 Authorization: Bearer <auth-key>
 ```
 
-<details>
-<summary><code>GET /v1/models</code></summary>
-<br>
-
-返回当前暴露的图片模型列表。
+### 查看模型
 
 ```bash
-curl http://localhost:8000/v1/models \
-  -H "Authorization: Bearer <auth-key>"
+curl "$AI2API_BASE_URL/v1/models" \
+  -H 'Authorization: Bearer chatgpt2api'
 ```
 
-<details>
-<summary>说明</summary>
-<br>
-
-| 字段   | 说明                                                                                                         |
-|:-----|:-----------------------------------------------------------------------------------------------------------|
-| 返回模型 | `gpt-image-2`、`codex-gpt-image-2`、`auto`、`gpt-5`、`gpt-5-1`、`gpt-5-2`、`gpt-5-3`、`gpt-5-3-mini`、`gpt-5-mini` |
-| 接入场景 | 可接入 Cherry Studio、New API 等上游或客户端                                                                          |
-
-<br>
-</details>
-</details>
-
-<details>
-<summary><code>POST /v1/images/generations</code></summary>
-<br>
-
-OpenAI 兼容图片生成接口，用于文生图。
+### 图片生成
 
 ```bash
-curl http://localhost:8000/v1/images/generations \
-  -H "Content-Type: application/json" \
-  -H "Authorization: Bearer <auth-key>" \
+curl "$AI2API_BASE_URL/v1/images/generations" \
+  -H 'Content-Type: application/json' \
+  -H 'Authorization: Bearer chatgpt2api' \
   -d '{
     "model": "gpt-image-2",
     "prompt": "一只漂浮在太空里的猫",
@@ -189,153 +204,65 @@ curl http://localhost:8000/v1/images/generations \
   }'
 ```
 
-<details>
-<summary>字段说明</summary>
-<br>
-
-| 字段                | 说明                                                 |
-|:------------------|:---------------------------------------------------|
-| `model`           | 图片模型，当前可用值以 `/v1/models` 返回结果为准，推荐使用 `gpt-image-2` |
-| `prompt`          | 图片生成提示词                                            |
-| `n`               | 生成数量，当前后端限制为 `1-4`                                 |
-| `response_format` | 当前请求模型中包含该字段，默认值为 `b64_json`                       |
-
-<br>
-</details>
-</details>
-
-<details>
-<summary><code>POST /v1/images/edits</code></summary>
-<br>
-
-OpenAI 兼容图片编辑接口，可上传图片文件，也可按官方 JSON 格式传入图片链接并生成编辑结果。
+### 图片编辑
 
 ```bash
-curl http://localhost:8000/v1/images/edits \
-  -H "Authorization: Bearer <auth-key>" \
-  -F "model=gpt-image-2" \
-  -F "prompt=把这张图改成赛博朋克夜景风格" \
-  -F "n=1" \
-  -F "image=@./input.png"
+curl "$AI2API_BASE_URL/v1/images/edits" \
+  -H 'Authorization: Bearer chatgpt2api' \
+  -F 'model=gpt-image-2' \
+  -F 'prompt=把这张图改成赛博朋克夜景风格' \
+  -F 'n=1' \
+  -F 'image=@./input.png'
 ```
 
-也可以直接传图片 URL：
+## 存储后端
+
+通过 `STORAGE_BACKEND` 切换存储方式：
+
+- `json`：本地 JSON 文件
+- `sqlite`：本地 SQLite 数据库，推荐小规模本地部署使用
+- `postgres`：外部 PostgreSQL，需要配置 `DATABASE_URL`
+- `git`：Git 私有仓库，需要配置 `GIT_REPO_URL` 和 `GIT_TOKEN`
+
+PostgreSQL 示例：
+
+```env
+STORAGE_BACKEND=postgres
+DATABASE_URL=postgresql://user:password@host:5432/dbname
+```
+
+## 常用排查命令
+
+查看容器和端口：
 
 ```bash
-curl http://localhost:8000/v1/images/edits \
-  -H "Authorization: Bearer <auth-key>" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "model": "gpt-image-2",
-    "prompt": "把这张图改成赛博朋克夜景风格",
-    "images": [
-      {"image_url": "https://example.com/input.png"}
-    ]
-  }'
+docker ps --format 'table {{.Names}}\t{{.Image}}\t{{.Ports}}'
+ss -ltnp
 ```
 
-<details>
-<summary>字段说明</summary>
-<br>
-
-| 字段          | 说明                                            |
-|:------------|:----------------------------------------------|
-| `model`     | 图片模型， `gpt-image-2`                           |
-| `prompt`    | 图片编辑提示词                                       |
-| `n`         | 生成数量，当前后端限制为 `1-4`                            |
-| `image`     | 需要编辑的图片文件，使用 multipart/form-data 上传           |
-| `images`    | JSON 图片引用数组，支持 `{"image_url": "https://..."}` |
-| `image_url` | 表单模式下也可直接传图片链接，支持重复字段传多张图                     |
-
-<br>
-</details>
-</details>
-
-<details>
-<summary><code>POST /v1/chat/completions</code></summary>
-<br>
-
-面向图片场景的 Chat Completions 兼容接口，不是完整通用聊天代理。
+查看日志：
 
 ```bash
-curl http://localhost:8000/v1/chat/completions \
-  -H "Content-Type: application/json" \
-  -H "Authorization: Bearer <auth-key>" \
-  -d '{
-    "model": "gpt-image-2",
-    "messages": [
-      {
-        "role": "user",
-        "content": "生成一张雨夜东京街头的赛博朋克猫"
-      }
-    ],
-    "n": 1
-  }'
+docker logs -f ai2api-local
 ```
 
-<details>
-<summary>字段说明</summary>
-<br>
-
-| 字段         | 说明                |
-|:-----------|:------------------|
-| `model`    | 图片模型，默认按图片生成场景处理  |
-| `messages` | 消息数组，需要是图片相关请求内容  |
-| `n`        | 生成数量，按当前实现解析为图片数量 |
-| `stream`   | 已实现，但仍在测试         |
-
-<br>
-</details>
-</details>
-
-<details>
-<summary><code>POST /v1/responses</code></summary>
-<br>
-
-面向图片生成工具调用的 Responses API 兼容接口，不是完整通用 Responses API 代理。
+检查 compose 配置：
 
 ```bash
-curl http://localhost:8000/v1/responses \
-  -H "Content-Type: application/json" \
-  -H "Authorization: Bearer <auth-key>" \
-  -d '{
-    "model": "gpt-5",
-    "input": "生成一张未来感城市天际线图片",
-    "tools": [
-      {
-        "type": "image_generation"
-      }
-    ]
-  }'
+docker compose -f docker-compose.mount.yml config
+docker compose -f docker-compose.local.yml config
 ```
 
-<details>
-<summary>字段说明</summary>
-<br>
+检查 nginx：
 
-| 字段       | 说明                            |
-|:---------|:------------------------------|
-| `model`  | 响应中会回显该模型字段，但图片生成当前仍走图片生成兼容逻辑 |
-| `input`  | 输入内容，需要能解析出图片生成提示词            |
-| `tools`  | 必须包含 `image_generation` 工具请求  |
-| `stream` | 已实现，但仍在测试                     |
+```bash
+docker exec nginx nginx -t
+docker exec nginx nginx -T | grep -n ai2api -A40 -B5
+```
 
-<br>
-</details>
-</details>
+## 备注
 
-## 社区支持
-
-学 AI , 上 L 站：[LinuxDO](https://linux.do)
-
-## Contributors
-
-感谢所有为本项目做出贡献的开发者：
-
-<a href="https://github.com/basketikun/chatgpt2api/graphs/contributors">
-  <img alt="Contributors" src="https://contrib.rocks/image?repo=basketikun/chatgpt2api" />
-</a>
-
-## Star History
-
-[![Star History Chart](https://api.star-history.com/chart?repos=basketikun/chatgpt2api&type=date&legend=top-left)](https://www.star-history.com/?repos=basketikun%2Fchatgpt2api&type=date&legend=top-left)
+- 推荐优先使用 `docker-compose.mount.yml`。
+- `docker-compose.local.yml` 适合需要完整镜像交付时使用。
+- 不建议提交 `web/node_modules`、`web/out`、`.venv` 等本地生成目录。
+- 本地 `.venv/` 不是 Docker 部署必需项。
