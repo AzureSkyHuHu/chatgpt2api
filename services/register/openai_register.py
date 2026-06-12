@@ -203,6 +203,18 @@ def _is_cloudflare_challenge(resp) -> bool:
     )
 
 
+def _detect_outbound_ip(session: requests.Session) -> tuple[str, str]:
+    try:
+        resp = session.get("https://api.ipify.org?format=json", timeout=10, verify=False)
+        data = _response_json(resp)
+        ip = str(data.get("ip") or "").strip()
+        if ip:
+            return ip, ""
+        return "", f"HTTP {getattr(resp, 'status_code', 'unknown')}: {str(getattr(resp, 'text', '') or '')[:200]}"
+    except Exception as exc:
+        return "", str(exc)
+
+
 def create_mailbox(username: str | None = None) -> dict:
     return mail_provider.create_mailbox(config["mail"], username)
 
@@ -304,10 +316,12 @@ def request_platform_oauth_token(session: requests.Session, code: str, code_veri
 
 class PlatformRegistrar:
     def __init__(self, proxy: str = "") -> None:
+        self.proxy = str(proxy or "").strip()
         self.session = create_session(proxy)
         self.device_id = str(uuid.uuid4())
         self.code_verifier = ""
         self.platform_auth_code = ""
+        self.last_outbound_ip = ""
 
     def close(self) -> None:
         self.session.close()
@@ -327,6 +341,12 @@ class PlatformRegistrar:
 
     def _platform_authorize(self, email: str, index: int) -> None:
         step(index, "开始 platform authorize")
+        ip, ip_error = _detect_outbound_ip(self.session)
+        if ip:
+            self.last_outbound_ip = ip
+            step(index, f"platform authorize 出口IP: {ip}")
+        else:
+            step(index, f"platform authorize 出口IP检测失败: {ip_error}", "yellow")
         self.session.cookies.set("oai-did", self.device_id, domain=".auth.openai.com")
         self.session.cookies.set("oai-did", self.device_id, domain="auth.openai.com")
         self.code_verifier, code_challenge = _generate_pkce()
@@ -353,7 +373,8 @@ class PlatformRegistrar:
             err = _response_json(resp).get("error", {}) if resp is not None else {}
             detail = f": {err.get('code', '')} - {err.get('message', '')}".strip(" -") if err else ""
             if _is_cloudflare_challenge(resp):
-                raise RuntimeError("被 Cloudflare 拦截，请更换 IP 重试")
+                ip_detail = f"，出口IP: {self.last_outbound_ip}" if self.last_outbound_ip else ""
+                raise RuntimeError(f"被 Cloudflare 拦截，请更换 IP 重试{ip_detail}")
             debug = _response_debug_detail(resp)
             status = getattr(resp, "status_code", "unknown")
             raise RuntimeError(error or f"platform_authorize_http_{status}{detail}, {debug}")
