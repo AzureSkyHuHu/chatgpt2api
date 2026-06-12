@@ -63,17 +63,26 @@ cp .env.example .env
 | `APP_CONTAINER_NAME` | `ai2api-local` | Docker 容器名 |
 | `WEB_PORT` | `18000` | 宿主机访问端口 |
 | `APP_DOCKER_NETWORK` | `dnmp-infra` | Docker 外部网络 |
-| `STORAGE_BACKEND` | `sqlite` | 存储后端：`json` / `sqlite` / `postgres` / `git` |
-| `DATABASE_URL` | `sqlite:////app/data/accounts.db` | SQLite / PostgreSQL 连接地址 |
+| `STORAGE_BACKEND` | `postgres` | 存储后端：`json` / `sqlite` / `postgres` / `git` |
+| `DATABASE_URL` | `postgresql://root:123456@PostgreSQL:5432/ai2api` | PostgreSQL / SQLite 连接地址 |
 
 > 说明：环境变量名暂时保留 `CHATGPT2API_*`，这是为了兼容当前代码和已有配置。
 
 ## 首次启动
 
+当前默认依赖 dnmp 的 PostgreSQL 容器，数据库连接为：
+
+```text
+postgresql://root:123456@PostgreSQL:5432/ai2api
+```
+
 在项目根目录执行：
 
 ```bash
 docker network create dnmp-infra || true
+
+# 确保 PostgreSQL 已有 ai2api 数据库；已存在时忽略错误即可。
+docker exec PostgreSQL sh -lc 'createdb -U root ai2api 2>/dev/null || true'
 
 docker compose -f docker-compose.mount.yml build app
 
@@ -220,15 +229,22 @@ curl "$AI2API_BASE_URL/v1/images/edits" \
 通过 `STORAGE_BACKEND` 切换存储方式：
 
 - `json`：本地 JSON 文件
-- `sqlite`：本地 SQLite 数据库，推荐小规模本地部署使用
-- `postgres`：外部 PostgreSQL，需要配置 `DATABASE_URL`
+- `sqlite`：本地 SQLite 数据库
+- `postgres`：PostgreSQL，当前本地默认使用 dnmp 的 PostgreSQL 容器
 - `git`：Git 私有仓库，需要配置 `GIT_REPO_URL` 和 `GIT_TOKEN`
 
 PostgreSQL 示例：
 
 ```env
 STORAGE_BACKEND=postgres
-DATABASE_URL=postgresql://user:password@host:5432/dbname
+DATABASE_URL=postgresql://root:123456@PostgreSQL:5432/ai2api
+```
+
+如果要临时切回 SQLite：
+
+```env
+STORAGE_BACKEND=sqlite
+DATABASE_URL=sqlite:////app/data/accounts.db
 ```
 
 ## 常用排查命令
@@ -263,6 +279,7 @@ docker exec nginx nginx -T | grep -n ai2api -A40 -B5
 ## 备注
 
 - 推荐优先使用 `docker-compose.mount.yml`。
+- 当前默认存储为 PostgreSQL：`postgresql://root:123456@PostgreSQL:5432/ai2api`。
 - `docker-compose.local.yml` 适合需要完整镜像交付时使用。
 - 不建议提交 `web/node_modules`、`web/out`、`.venv` 等本地生成目录。
 - 本地 `.venv/` 不是 Docker 部署必需项。

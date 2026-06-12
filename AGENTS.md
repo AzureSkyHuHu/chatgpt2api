@@ -46,6 +46,13 @@ docker-compose.local.yml
 
 它会把代码和前端构建产物都打进镜像，适合需要完整镜像交付时使用。
 
+当前默认存储后端为 PostgreSQL，连接 dnmp 网络内的 `PostgreSQL` 容器：
+
+```text
+STORAGE_BACKEND=postgres
+DATABASE_URL=postgresql://root:123456@PostgreSQL:5432/ai2api
+```
+
 ## 端口
 
 默认宿主机端口为：
@@ -57,7 +64,7 @@ docker-compose.local.yml
 访问：
 
 ```text
-http://127.0.0.1:18000
+${AI2API_BASE_URL:-http://127.0.0.1:18000}
 ```
 
 如果需要临时换端口：
@@ -75,6 +82,9 @@ cp .env.example .env
 
 docker network create dnmp-infra || true
 
+# 确保 dnmp PostgreSQL 中存在 ai2api 数据库；已存在时忽略错误。
+docker exec PostgreSQL sh -lc 'createdb -U root ai2api 2>/dev/null || true'
+
 docker compose -f docker-compose.mount.yml build app
 
 docker compose -f docker-compose.mount.yml run --rm web-build
@@ -85,7 +95,7 @@ docker compose -f docker-compose.mount.yml up -d app
 验证：
 
 ```bash
-curl http://127.0.0.1:18000/version
+curl ${AI2API_BASE_URL:-http://127.0.0.1:18000}/version
 ```
 
 默认密钥来自 `.env` 的 `CHATGPT2API_AUTH_KEY`，示例值为：
@@ -97,7 +107,7 @@ chatgpt2api
 登录验证：
 
 ```bash
-curl -X POST http://127.0.0.1:18000/auth/login \
+curl -X POST ${AI2API_BASE_URL:-http://127.0.0.1:18000}/auth/login \
   -H 'Authorization: Bearer chatgpt2api'
 ```
 
