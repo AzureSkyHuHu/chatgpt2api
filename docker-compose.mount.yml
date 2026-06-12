@@ -1,9 +1,19 @@
 services:
+  web-build:
+    image: oven/bun:1.3.13
+    profiles:
+      - tools
+    working_dir: /src/web
+    command: sh -lc "bun install --frozen-lockfile --cache-dir=/root/.bun/install/cache && bun run build"
+    volumes:
+      - .:/src
+      - bun-cache:/root/.bun/install/cache
+
   app:
     build:
       context: .
       dockerfile: Dockerfile
-      target: app
+      target: runtime-deps
       args:
         DEBIAN_MIRROR: ${DEBIAN_MIRROR:-http://mirrors.tuna.tsinghua.edu.cn/debian}
         DEBIAN_SECURITY_MIRROR: ${DEBIAN_SECURITY_MIRROR:-http://mirrors.tuna.tsinghua.edu.cn/debian-security}
@@ -14,8 +24,21 @@ services:
     ports:
       - "${WEB_PORT:-18000}:80"
     volumes:
+      # Runtime data/config.
       - ./data:/app/data
       - ./config.json:/app/config.json
+
+      # Mount source code so normal code updates only need a container restart.
+      - ./main.py:/app/main.py:ro
+      - ./api:/app/api:ro
+      - ./services:/app/services:ro
+      - ./utils:/app/utils:ro
+      - ./scripts:/app/scripts:ro
+      - ./VERSION:/app/VERSION:ro
+      - ./CHANGELOG.md:/app/CHANGELOG.md:ro
+
+      # Frontend static export. Run `cd web && bun run build` after frontend changes.
+      - ./web/out:/app/web_dist:ro
     environment:
       CHATGPT2API_AUTH_KEY: ${CHATGPT2API_AUTH_KEY:-chatgpt2api}
       CHATGPT2API_BASE_URL: ${CHATGPT2API_BASE_URL:-}
@@ -25,25 +48,6 @@ services:
       GIT_TOKEN: ${GIT_TOKEN:-}
       GIT_BRANCH: ${GIT_BRANCH:-main}
       GIT_FILE_PATH: ${GIT_FILE_PATH:-accounts.json}
-    # 存储后端配置 (可选值: json, sqlite, postgres, git)
-    # environment:
-    #   STORAGE_BACKEND: json
-
-    # 数据库配置 (当 STORAGE_BACKEND=sqlite/postgres 时使用)
-    #   DATABASE_URL: postgresql://user:password@host:5432/dbname
-    #   DATABASE_URL: sqlite:////app/data/accounts.db
-
-    # Git 仓库配置 (当 STORAGE_BACKEND=git 时使用)
-    #   GIT_REPO_URL: https://github.com/user/repo.git
-    #   GIT_TOKEN: ghp_xxxxxxxxxxxx
-    #   GIT_BRANCH: main
-    #   GIT_FILE_PATH: accounts.json
-
-    # 认证密钥 (可选，覆盖 config.json)
-    #   CHATGPT2API_AUTH_KEY: your_secret_key
-
-    # 基础 URL (可选)
-    #   CHATGPT2API_BASE_URL: https://your-domain.com
     extra_hosts:
       - "host.docker.internal:host-gateway"
       - "piachi-tools.test.com:host-gateway"
@@ -54,3 +58,6 @@ networks:
   infra:
     external: true
     name: ${APP_DOCKER_NETWORK:-dnmp-infra}
+
+volumes:
+  bun-cache:
